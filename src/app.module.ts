@@ -5,11 +5,13 @@ import { AuthMiddleware } from './auth.middleware';
 import { ConfigModule } from '@nestjs/config';
 import { JellyfinAuthService } from './jellyfin-auth.service';
 import { ScheduleModule } from '@nestjs/schedule';
+import { CleanupService } from './cleanup/cleanup.service';
+
 
 @Module({
   imports: [ScheduleModule.forRoot(), ConfigModule.forRoot({ isGlobal: true })],
   controllers: [AppController],
-  providers: [AppService, Logger, JellyfinAuthService],
+  providers: [AppService, Logger, JellyfinAuthService, CleanupService],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
