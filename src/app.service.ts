@@ -278,6 +278,7 @@ export class AppService {
           const job = this.activeJobs.find((job) => job.id === jobId);
           if (!job) {
             // Job was cancelled and removed, just resolve
+            this.checkQueue()
             resolve();
             return;
           }
@@ -314,6 +315,7 @@ export class AppService {
           );
           reject(error);
         });
+        this.checkQueue()
       });
     } catch (error) {
       this.logger.error(`Error processing job ${jobId}: ${error.message}`);
