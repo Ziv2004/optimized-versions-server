@@ -17,6 +17,15 @@ export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer
       .apply(AuthMiddleware)
-      .forRoutes('optimize-version', 'download/:id', 'cancel-job/:id');
+      .forRoutes(
+        'optimize-version',
+        'download/:id',
+        'cancel-job/:id',
+        'statistics',
+        'job-status/:id',
+        'start-job/:id',
+        'all-jobs',
+        'delete-cache',
+      );
   }
 }
