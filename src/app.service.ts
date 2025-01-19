@@ -219,17 +219,18 @@ export class AppService {
   }
 
   private checkQueue() {
-    const runningJobs = Array.from(this.activeJobs.values()).filter(
-      (job) => job.status === 'optimizing',
-    ).length;
+    let runningJobs = this.activeJobs.filter((job) => job.status === 'optimizing')
+      .length;
 
     while (runningJobs < this.maxConcurrentJobs && this.jobQueue.length > 0) {
       const nextJobId = this.jobQueue.shift();
       if (nextJobId) {
         this.startJob(nextJobId);
+        runningJobs++;  // Now we track the newly started job
       }
     }
   }
+
 
   private startJob(jobId: string) {
     const job = this.activeJobs.find((job) => job.id === jobId);
