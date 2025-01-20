@@ -299,7 +299,6 @@ export class AppService {
               `Job ${jobId} completed successfully. Output: ${job.outputPath}, Size: ${this.formatSize(job.size || 0)}`,
             );
             resolve();
-            this.checkQueue()
           } else {
             job.status = 'failed';
             job.progress = 0;
