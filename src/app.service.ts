@@ -123,9 +123,10 @@ export class AppService {
       this.activeJobs = this.activeJobs.filter((job) => job.id !== jobId);
     }
 
-    this.checkQueue();
+    
 
-    this.logger.log(`Job ${jobId} canceled`);
+    this.logger.log(`Job ${jobId} cancelled`);
+    this.checkQueue();
     return true;
   }
 
@@ -237,7 +238,11 @@ export class AppService {
     if (job) {
       job.status = 'optimizing';
       const ffmpegArgs = this.getFfmpegArgs(job.inputUrl, job.outputPath);
-      this.startFFmpegProcess(jobId, ffmpegArgs);
+      this.startFFmpegProcess(jobId, ffmpegArgs)
+        .finally(() => {
+          // This runs after the returned Promise resolves or rejects.
+          this.checkQueue();
+        });
       this.logger.log(`Started job ${jobId}`);
     }
   }
@@ -278,7 +283,6 @@ export class AppService {
           const job = this.activeJobs.find((job) => job.id === jobId);
           if (!job) {
             // Job was cancelled and removed, just resolve
-            this.checkQueue()
             resolve();
             return;
           }
@@ -315,7 +319,6 @@ export class AppService {
           );
           reject(error);
         });
-        this.checkQueue()
       });
     } catch (error) {
       this.logger.error(`Error processing job ${jobId}: ${error.message}`);
@@ -323,11 +326,9 @@ export class AppService {
       if (job) {
         job.status = 'failed';
       }
-    } finally {
-      // Check queue after job completion or failure
-      this.checkQueue();
     }
   }
+
 
   private async getVideoDuration(
     inputUrl: string,
