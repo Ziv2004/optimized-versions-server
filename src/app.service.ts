@@ -31,6 +31,7 @@ export class AppService {
   private videoDurations: Map<string, number> = new Map();
   private jobQueue: string[] = [];
   private maxConcurrentJobs: number;
+  private maxCachedPerUser: number;
   private cacheDir: string;
 
   constructor(
@@ -43,6 +44,10 @@ export class AppService {
       1,
     );
 
+    this.maxCachedPerUser = this.configService.get<number>(
+      'MAX_CACHED_PER_USER',
+      10,
+    );
     // Ensure the cache directory exists
     if (!fs.existsSync(this.cacheDir)) {
       fs.mkdirSync(this.cacheDir, { recursive: true });
@@ -220,18 +225,43 @@ export class AppService {
   }
 
   private checkQueue() {
-    let runningJobs = this.activeJobs.filter((job) => job.status === 'optimizing')
-      .length;
-
-    while (runningJobs < this.maxConcurrentJobs && this.jobQueue.length > 0) {
-      const nextJobId = this.jobQueue.shift();
-      if (nextJobId) {
-        this.startJob(nextJobId);
-        runningJobs++;  // Now we track the newly started job
+    let runningJobs = this.activeJobs.filter((job) => job.status === 'optimizing').length;
+  
+    this.logger.log(
+      `${runningJobs} active jobs running and ${this.jobQueue.length} items in the queue`,
+    );
+  
+    for (const index in this.jobQueue) {
+      if (runningJobs >= this.maxConcurrentJobs) {
+        break; // Stop if max concurrent jobs are reached
       }
+      const nextJobId = this.jobQueue[index]; // Access job ID by index
+      if (!this.userTooManyCachedItems(nextJobId)) {
+        // Skip this job if user cache limits are reached
+        continue;
+      }
+      // Start the job and remove it from the queue
+      this.startJob(nextJobId);
+      this.jobQueue.splice(Number(index), 1); // Remove the started job from the queue
+      runningJobs++; // Increment running jobs
     }
   }
 
+  private userTooManyCachedItems(jobid): boolean{
+    if(this.maxCachedPerUser == 0){
+      return false
+    }
+    const theNewJob: Job = this.activeJobs.find((job) => job.id === jobid)
+    let completedUserJobs = this.activeJobs.filter((job) => job.status === "completed" && job.deviceId === theNewJob.deviceId)
+    if((completedUserJobs.length >= this.maxCachedPerUser)){
+      this.logger.log(`Waiting for items to be downloaded - device ${theNewJob.deviceId} has ${completedUserJobs.length} downloads waiting `);
+      return false
+    }
+    else{
+      this.logger.log(`Optimizing - device ${theNewJob.deviceId} has ${completedUserJobs.length} downloads waiting`);
+      return true
+    }  
+  }
 
   private startJob(jobId: string) {
     const job = this.activeJobs.find((job) => job.id === jobId);
@@ -261,6 +291,7 @@ export class AppService {
     ];
   }
 
+  
   private async startFFmpegProcess(
     jobId: string,
     ffmpegArgs: string[],
@@ -329,7 +360,7 @@ export class AppService {
     }
   }
 
-
+  
   private async getVideoDuration(
     inputUrl: string,
     jobId: string,
