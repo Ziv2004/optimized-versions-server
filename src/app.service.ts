@@ -388,7 +388,7 @@ export class AppService {
             this.logger.error(
               `Job ${jobId} failed with exit code ${code}. Input URL: ${job.inputUrl}`,
             );
-            reject(new Error(`FFmpeg process failed with exit code ${code}`));
+            // reject(new Error(`FFmpeg process failed with exit code ${code}`));
           }
         });
 
@@ -396,7 +396,7 @@ export class AppService {
           this.logger.error(
             `FFmpeg process error for job ${jobId}: ${error.message}`,
           );
-          reject(error);
+          // reject(error);
         });
       });
     } catch (error) {
