@@ -6,12 +6,13 @@ import { ConfigModule } from '@nestjs/config';
 import { JellyfinAuthService } from './jellyfin-auth.service';
 import { ScheduleModule } from '@nestjs/schedule';
 import { CleanupService } from './cleanup/cleanup.service';
+import { FileRemoval } from './cleanup/removalUtils';
 
 
 @Module({
   imports: [ScheduleModule.forRoot(), ConfigModule.forRoot({ isGlobal: true })],
   controllers: [AppController],
-  providers: [AppService, Logger, JellyfinAuthService, CleanupService],
+  providers: [AppService, Logger, JellyfinAuthService, CleanupService, FileRemoval],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

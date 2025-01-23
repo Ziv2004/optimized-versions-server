@@ -15,6 +15,7 @@ import {
 import { Response } from 'express';
 import * as fs from 'fs';
 import { AppService, Job } from './app.service';
+import { log } from 'console';
 
 @Controller()
 export class AppController {
@@ -92,7 +93,7 @@ export class AppController {
   @Delete('cancel-job/:id')
   async cancelJob(@Param('id') id: string) {
     this.logger.log(`Cancellation request for job: ${id}`);
-
+    // this.appService.completeJob(id);
     const result = this.appService.cancelJob(id);
     if (result) {
       return { message: 'Job cancelled successfully' };
@@ -127,25 +128,26 @@ export class AppController {
     );
 
     const fileStream = fs.createReadStream(filePath);
-    fileStream.pipe(res);
+    this.logger.log(`Download started for ${filePath}`)
 
-    // Wait for the file to finish sending
-    await new Promise((resolve) => {
-      res.on('finish', resolve);
+    return new Promise((resolve, reject) => {
+      fileStream.pipe(res);
+
+      fileStream.on('end', () => {
+        // File transfer completed
+        this.logger.log(`File transfer ended for: ${filePath}`)
+        
+        resolve(null);
+      });
+
+      fileStream.on('error', (err) => {
+        // Handle errors during file streaming
+        this.logger.error(`Error streaming file ${filePath}: ${err.message}`);
+        reject(err);
+      });
     });
-
-    // const fileName = basename(filePath);
-    // this.logger.log(`Download request for file: ${fileName}`);
-
-    // const mimeType = mime.lookup(filePath) || 'application/octet-stream';
-
-    // res.set({
-    //   'Content-Type': mimeType,
-    //   'Content-Disposition': `attachment; filename="${fileName}"`,
-    // });
-
-    // return new StreamableFile(fs.createReadStream(filePath));
   }
+
 
   @Delete('delete-cache')
   async deleteCache() {

@@ -9,10 +9,13 @@ import * as path from 'path';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import { promises as fsPromises } from 'fs';
+import { CACHE_DIR } from './constants';
+import { FileRemoval } from './cleanup/removalUtils';
+import * as kill from 'tree-kill';
 
 export interface Job {
   id: string;
-  status: 'queued' | 'optimizing' | 'completed' | 'failed' | 'cancelled';
+  status: 'queued' | 'optimizing' | 'completed' | 'failed' | 'cancelled' | 'ready-for-removal';
   progress: number;
   outputPath: string;
   inputUrl: string;
@@ -33,25 +36,27 @@ export class AppService {
   private maxConcurrentJobs: number;
   private maxCachedPerUser: number;
   private cacheDir: string;
+  private immediateRemoval: boolean;
 
   constructor(
     private logger: Logger,
     private configService: ConfigService,
+    private readonly fileRemoval: FileRemoval
+
   ) {
-    this.cacheDir = path.join(process.cwd(), 'cache');
+    this.cacheDir = CACHE_DIR;
     this.maxConcurrentJobs = this.configService.get<number>(
       'MAX_CONCURRENT_JOBS',
       1,
     );
-
     this.maxCachedPerUser = this.configService.get<number>(
       'MAX_CACHED_PER_USER',
       10,
     );
-    // Ensure the cache directory exists
-    if (!fs.existsSync(this.cacheDir)) {
-      fs.mkdirSync(this.cacheDir, { recursive: true });
-    }
+    this.immediateRemoval = this.configService.get<boolean>(
+      'REMOVE_FILE_AFTER_RIGHT_DOWNLOAD',
+      true,
+    );
   }
 
   async downloadAndCombine(
@@ -97,7 +102,7 @@ export class AppService {
     if (!deviceId) {
       return this.activeJobs;
     }
-    return this.activeJobs.filter((job) => job.deviceId === deviceId);
+    return this.activeJobs.filter((job) => job.deviceId === deviceId && job.status !== 'ready-for-removal');
   }
 
   async deleteCache(): Promise<{ message: string }> {
@@ -115,24 +120,74 @@ export class AppService {
     }
   }
 
+  removeJob(jobId: string): void {
+    this.activeJobs = this.activeJobs.filter(job => job.id !== jobId);
+    this.logger.log(`Job ${jobId} removed.`);
+  }
+
   cancelJob(jobId: string): boolean {
-    const job = this.activeJobs.find((job) => job.id === jobId);
+    this.completeJob(jobId);
+    const job = this.activeJobs.find(job => job.id === jobId);
     const process = this.ffmpegProcesses.get(jobId);
+  
+    const finalizeJobRemoval = () => {
+      if (job) {
+        this.jobQueue = this.jobQueue.filter(id => id !== jobId);
+  
+        if (this.immediateRemoval === true || job.progress < 100) {
+          this.fileRemoval.cleanupReadyForRemovalJobs([job]);
+          this.activeJobs = this.activeJobs.filter(activeJob => activeJob.id !== jobId);
+          this.logger.log(`Job ${jobId} removed`);
+        }
+        else{
+          this.logger.log('Immediate removal is not allowed, cleanup service will take care in due time')
+        }
+      }
+      this.checkQueue();
+    };
+
     if (process) {
-      process.kill('SIGKILL');
+      try {
+        this.logger.log(`Attempting to kill process tree for PID ${process.pid}`);
+        new Promise<void>((resolve, reject) => {
+          kill(process.pid, 'SIGINT', (err) => {
+            if (err) {
+              this.logger.error(`Failed to kill process tree for PID ${process.pid}: ${err.message}`);
+              reject(err);
+            } else {
+              this.logger.log(`Successfully killed process tree for PID ${process.pid}`);
+              resolve();
+              finalizeJobRemoval()
+            }
+          });
+        });
+      } catch (err) { 
+        this.logger.error(`Error terminating process for job ${jobId}: ${err.message}`);
+      }
       this.ffmpegProcesses.delete(jobId);
+      return true;
+    } else {
+      finalizeJobRemoval();
+      return true;
     }
-
+  }
+  
+  completeJob(jobId: string):void{
+    const job = this.activeJobs.find((job) => job.id === jobId);
     if (job) {
-      this.jobQueue = this.jobQueue.filter((id) => id !== jobId);
-      this.activeJobs = this.activeJobs.filter((job) => job.id !== jobId);
+      job.status = 'ready-for-removal';
+      job.timestamp = new Date()
+      this.logger.log(`Job ${jobId} marked as completed and ready for removal.`);
+    } else {
+      this.logger.warn(`Job ${jobId} not found. Cannot mark as completed.`);
     }
+  }
 
-    
-
-    this.logger.log(`Job ${jobId} cancelled`);
-    this.checkQueue();
-    return true;
+  cleanupJob(jobId: string): void {
+    const job = this.activeJobs.find((job) => job.id === jobId);
+    this.activeJobs = this.activeJobs.filter((job) => job.id !== jobId);
+    this.ffmpegProcesses.delete(jobId);
+    this.videoDurations.delete(jobId);
   }
 
   getTranscodedFilePath(jobId: string): string | null {
@@ -141,12 +196,6 @@ export class AppService {
       return job.outputPath;
     }
     return null;
-  }
-
-  cleanupJob(jobId: string): void {
-    this.activeJobs = this.activeJobs.filter((job) => job.id !== jobId);
-    this.ffmpegProcesses.delete(jobId);
-    this.videoDurations.delete(jobId);
   }
 
   getMaxConcurrentJobs(): number {
@@ -300,20 +349,19 @@ export class AppService {
       await this.getVideoDuration(ffmpegArgs[1], jobId);
 
       return new Promise((resolve, reject) => {
-        const ffmpegProcess = spawn('ffmpeg', ffmpegArgs);
+        const ffmpegProcess = spawn('ffmpeg', ffmpegArgs, { stdio: ['pipe', 'pipe', 'pipe']});
         this.ffmpegProcesses.set(jobId, ffmpegProcess);
 
         ffmpegProcess.stderr.on('data', (data) => {
           this.updateProgress(jobId, data.toString());
         });
-
+        
         ffmpegProcess.on('close', async (code) => {
           this.ffmpegProcesses.delete(jobId);
           this.videoDurations.delete(jobId);
 
           const job = this.activeJobs.find((job) => job.id === jobId);
           if (!job) {
-            // Job was cancelled and removed, just resolve
             resolve();
             return;
           }
