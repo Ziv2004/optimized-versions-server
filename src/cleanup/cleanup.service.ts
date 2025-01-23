@@ -28,7 +28,7 @@ export class CleanupService {
     this.removalDelayMs = removalDelayHours * 60 * 60 * 1000; // Convert hours to milliseconds
   }
 
-  @Cron(CronExpression.EVERY_MINUTE)
+  @Cron(CronExpression.EVERY_HOUR)
   async handleCleanup(): Promise<void> {
     const jobs = this.appService.getAllJobs();
     const outputPaths = new Set(jobs.map((job) => job.outputPath));
