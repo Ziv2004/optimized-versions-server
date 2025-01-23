@@ -319,10 +319,14 @@ export class AppService {
       const nextJobId = this.jobQueue[index]; // Access job ID by index
       let nextJob: Job = this.activeJobs.find((job) => job.id === nextJobId);
       
-      if (!this.userTooManyCachedItems(nextJobId) || this.isDeviceIdInOptimizeHistory(nextJob)) {
+      if (!this.userTooManyCachedItems(nextJobId) ) {
         nextJob.status = 'pending downloads limit'
-        // Skip this job if user cache limits are reached or the deviceID is in the recently finished jobs
+        // Skip this job if user cache limits are reached
         continue;
+      }
+      if(this.isDeviceIdInOptimizeHistory(nextJob)){
+        // Skip this job if deviceID is in the recently finished jobs
+        continue
       }
       // Start the job and remove it from the queue
       this.startJob(nextJobId);
