@@ -265,7 +265,7 @@ export class AppService {
   }
 
   private getCompletedJobs(): number {
-    return this.activeJobs.filter((job) => job.status === 'completed').length;
+    return this.activeJobs.filter((job) => job.status === 'ready-for-removal').length;
   }
 
   private getUniqueDevices(): number {
