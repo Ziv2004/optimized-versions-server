@@ -15,7 +15,7 @@ import * as kill from 'tree-kill';
 
 export interface Job {
   id: string;
-  status: 'queued' | 'optimizing' | 'completed' | 'failed' | 'cancelled' | 'ready-for-removal';
+  status: 'queued' | 'optimizing' | 'pending downloads limit' | 'completed' | 'failed' | 'cancelled' | 'ready-for-removal';
   progress: number;
   outputPath: string;
   inputUrl: string;
@@ -30,6 +30,7 @@ export interface Job {
 @Injectable()
 export class AppService {
   private activeJobs: Job[] = [];
+  private optimizationHistory: Job[] = [];
   private ffmpegProcesses: Map<string, ChildProcess> = new Map();
   private videoDurations: Map<string, number> = new Map();
   private jobQueue: string[] = [];
@@ -133,7 +134,6 @@ export class AppService {
     const finalizeJobRemoval = () => {
       if (job) {
         this.jobQueue = this.jobQueue.filter(id => id !== jobId);
-  
         if (this.immediateRemoval === true || job.progress < 100) {
           this.fileRemoval.cleanupReadyForRemovalJobs([job]);
           this.activeJobs = this.activeJobs.filter(activeJob => activeJob.id !== jobId);
@@ -143,6 +143,9 @@ export class AppService {
           this.logger.log('Immediate removal is not allowed, cleanup service will take care in due time')
         }
       }
+      this.activeJobs
+        .filter((nextjob) => nextjob.deviceId === job.deviceId && nextjob.status === 'pending downloads limit')
+        .forEach((job) => job.status = 'queued')
       this.checkQueue();
     };
 
@@ -174,6 +177,7 @@ export class AppService {
   
   completeJob(jobId: string):void{
     const job = this.activeJobs.find((job) => job.id === jobId);
+
     if (job) {
       job.status = 'ready-for-removal';
       job.timestamp = new Date()
@@ -268,6 +272,34 @@ export class AppService {
     return this.activeJobs.filter((job) => job.status === 'ready-for-removal').length;
   }
 
+  private isDeviceIdInOptimizeHistory(job:Job){
+    const uniqueDeviceIds: string[] = [...new Set(this.optimizationHistory.map((job: Job) => job.deviceId))];
+    const result = uniqueDeviceIds.includes(job.deviceId); // Check if job.deviceId is in uniqueDeviceIds
+    this.logger.log(`Device ID ${job.deviceId} is ${result ? 'in' : 'not in'} the finished jobs. Optimizing ${result ? 'Allowed' : 'not Allowed'}`);
+    return result
+  }
+
+  private getActiveJobDeviceIds(): string[]{
+    const uniqueDeviceIds: string[] = [
+      ...new Set(
+        this.activeJobs
+          .filter((job: Job) => job.status === 'queued') // Filter jobs with status 'queued'
+          .map((job: Job) => job.deviceId) // Extract deviceId
+      )
+    ];
+    return uniqueDeviceIds
+  }
+  
+  private handleOptimizationHistory(job: Job): void{
+    // create a finished jobs list to make sure every device gets equal optimizing time
+    this.optimizationHistory.push(job) // push the newest job to the finished jobs list
+    const amountOfActiveDeviceIds = this.getActiveJobDeviceIds().length // get the amount of active queued job device ids
+    while(amountOfActiveDeviceIds <= this.optimizationHistory.length && this.optimizationHistory.length > 0){ // the finished jobs should always be lower than the amount of active jobs. This is to push out the last deviceid: FIFO
+      this.optimizationHistory.shift() // shift away the oldest job.
+    }
+    this.logger.log(`${this.optimizationHistory.length} deviceIDs have recently finished a job`)
+  }
+
   private getUniqueDevices(): number {
     const devices = new Set(this.activeJobs.map((job) => job.deviceId));
     return devices.size;
@@ -285,8 +317,11 @@ export class AppService {
         break; // Stop if max concurrent jobs are reached
       }
       const nextJobId = this.jobQueue[index]; // Access job ID by index
-      if (!this.userTooManyCachedItems(nextJobId)) {
-        // Skip this job if user cache limits are reached
+      let nextJob: Job = this.activeJobs.find((job) => job.id === nextJobId);
+      
+      if (!this.userTooManyCachedItems(nextJobId) || this.isDeviceIdInOptimizeHistory(nextJob)) {
+        nextJob.status = 'pending downloads limit'
+        // Skip this job if user cache limits are reached or the deviceID is in the recently finished jobs
         continue;
       }
       // Start the job and remove it from the queue
@@ -301,7 +336,7 @@ export class AppService {
       return false
     }
     const theNewJob: Job = this.activeJobs.find((job) => job.id === jobid)
-    let completedUserJobs = this.activeJobs.filter((job) => job.status === "completed" && job.deviceId === theNewJob.deviceId)
+    let completedUserJobs = this.activeJobs.filter((job) => (job.status === "completed" || job.status === 'optimizing') && job.deviceId === theNewJob.deviceId)
     if((completedUserJobs.length >= this.maxCachedPerUser)){
       this.logger.log(`Waiting for items to be downloaded - device ${theNewJob.deviceId} has ${completedUserJobs.length} downloads waiting `);
       return false
@@ -316,6 +351,7 @@ export class AppService {
     const job = this.activeJobs.find((job) => job.id === jobId);
     if (job) {
       job.status = 'optimizing';
+      this.handleOptimizationHistory(job)
       const ffmpegArgs = this.getFfmpegArgs(job.inputUrl, job.outputPath);
       this.startFFmpegProcess(jobId, ffmpegArgs)
         .finally(() => {
@@ -367,6 +403,7 @@ export class AppService {
           }
 
           if (code === 0) {
+            
             job.status = 'completed';
             job.progress = 100;
             // Update the file size
