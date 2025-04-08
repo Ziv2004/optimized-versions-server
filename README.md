@@ -10,6 +10,14 @@ The download in the app becomed a 2 step process.
 1. Optimize
 2. Download
 
+## Features
+
+- **File Transfer Validation**: Ensures downloads are complete and uncorrupted using checksums
+- **Resumable Downloads**: Support for resuming interrupted downloads
+- **Progress Tracking**: Real-time download progress monitoring
+- **Range Requests**: Efficient partial file downloads
+- **File Metadata**: Pre-download file information including size and checksum
+
 ## Usage
 
 Note: The server works best if it's on the same server as the Jellyfin server.
@@ -57,6 +65,25 @@ In the meantime, the app will poll the server for the progress of the optimize.
 As soon as the server is finished with the conversion the app (if open) will start downloading the video file. If the app is not open the download will start as soon as the app is opened. After the download has started the app can be minimized. 
 
 This means that the user needs to 1. initiate the download, and 2. open the app once before download. 
+
+### 3. File Transfer Validation
+
+The server implements several validation mechanisms to ensure reliable downloads:
+
+- **Checksums**: SHA-256 checksums verify file integrity
+- **Size Validation**: Ensures complete file transfers
+- **Range Requests**: Supports partial downloads and resuming
+- **Progress Tracking**: Real-time download status updates
+
+## API Endpoints
+
+- `POST /optimize-version`: Start a new optimization job
+- `GET /download/:id`: Download a transcoded file
+- `GET /file-info/:id`: Get file metadata including checksum
+- `GET /job-status/:id`: Check job status
+- `DELETE /cancel-job/:id`: Cancel a job
+- `GET /statistics`: Get server statistics
+- `DELETE /delete-cache`: Clear the cache
 
 ## Other
 
