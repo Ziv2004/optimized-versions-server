@@ -2,6 +2,7 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import { ChildProcess, spawn } from 'child_process';
 import { v4 as uuidv4 } from 'uuid';
@@ -12,6 +13,9 @@ import { promises as fsPromises } from 'fs';
 import { CACHE_DIR } from './constants';
 import { FileRemoval } from './cleanup/removalUtils';
 import * as kill from 'tree-kill';
+import { Get } from '@nestjs/common';
+import { Param } from '@nestjs/common';
+import * as crypto from 'crypto';
 
 export interface Job {
   id: string;
@@ -25,6 +29,12 @@ export interface Job {
   size: number;
   item: any;
   speed?: number;
+}
+
+export interface RangeRequest {
+  start: number;
+  end: number;
+  total: number;
 }
 
 @Injectable()
@@ -508,6 +518,74 @@ export class AppService {
           }
         }
       }
+    }
+  }
+
+  private parseRangeHeader(rangeHeader: string, fileSize: number): RangeRequest | null {
+    if (!rangeHeader) return null;
+    
+    const matches = rangeHeader.match(/bytes=(\d+)-(\d+)?/);
+    if (!matches) return null;
+    
+    const start = parseInt(matches[1], 10);
+    const end = matches[2] ? parseInt(matches[2], 10) : fileSize - 1;
+    
+    return {
+      start,
+      end: Math.min(end, fileSize - 1),
+      total: fileSize
+    };
+  }
+
+  @Get('file-info/:id')
+  async getFileInfo(@Param('id') id: string) {
+    const filePath = this.getTranscodedFilePath(id);
+    if (!filePath) {
+      throw new NotFoundException('File not found or job not completed');
+    }
+
+    const stat = fs.statSync(filePath);
+    return {
+      size: stat.size,
+      contentType: 'video/mp4',
+      acceptsRanges: true
+    };
+  }
+
+  /**
+   * Calculate SHA-256 checksum for a file
+   */
+  public async calculateFileChecksum(filePath: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const hash = crypto.createHash('sha256');
+      const stream = fs.createReadStream(filePath);
+      
+      stream.on('error', err => reject(err));
+      stream.on('data', chunk => hash.update(chunk));
+      stream.on('end', () => resolve(hash.digest('hex')));
+    });
+  }
+
+  /**
+   * Validate file integrity
+   */
+  public async validateFileIntegrity(filePath: string, expectedSize: number): Promise<{ isValid: boolean; checksum: string }> {
+    try {
+      const stats = await fsPromises.stat(filePath);
+      
+      // Check file size
+      if (stats.size !== expectedSize) {
+        this.logger.error(`File size mismatch for ${filePath}. Expected: ${expectedSize}, Got: ${stats.size}`);
+        return { isValid: false, checksum: '' };
+      }
+
+      // Calculate checksum
+      const checksum = await this.calculateFileChecksum(filePath);
+      
+      return { isValid: true, checksum };
+    } catch (error) {
+      this.logger.error(`Error validating file integrity for ${filePath}: ${error.message}`);
+      return { isValid: false, checksum: '' };
     }
   }
 }

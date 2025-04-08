@@ -7,12 +7,12 @@ import { JellyfinAuthService } from './jellyfin-auth.service';
 import { ScheduleModule } from '@nestjs/schedule';
 import { CleanupService } from './cleanup/cleanup.service';
 import { FileRemoval } from './cleanup/removalUtils';
-
+import { DownloadService } from './download.service';
 
 @Module({
   imports: [ScheduleModule.forRoot(), ConfigModule.forRoot({ isGlobal: true })],
   controllers: [AppController],
-  providers: [AppService, Logger, JellyfinAuthService, CleanupService, FileRemoval],
+  providers: [AppService, Logger, JellyfinAuthService, CleanupService, FileRemoval, DownloadService],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
@@ -21,6 +21,7 @@ export class AppModule implements NestModule {
       .forRoutes(
         'optimize-version',
         'download/:id',
+        'file-info/:id',
         'cancel-job/:id',
         'statistics',
         'job-status/:id',
