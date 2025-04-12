@@ -108,7 +108,7 @@ export class AppService {
 
   getJobStatus(jobId: string): Job | null {
     const job = this.activeJobs.find((job) => job.id === jobId);
-    return job;
+    return job || null;
   }
 
   getAllJobs(deviceId?: string | null): Job[] {
