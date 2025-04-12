@@ -447,7 +447,6 @@ export class AppService {
           this.logger.error(
             `FFmpeg process error for job ${jobId}: ${error.message}`,
           );
-          // reject(error);
         });
       });
     } catch (error) {
