@@ -21,7 +21,6 @@ export class AppModule implements NestModule {
       .forRoutes(
         'optimize-version',
         'download/:id',
-        'file-info/:id',
         'cancel-job/:id',
         'statistics',
         'job-status/:id',
@@ -31,3 +30,4 @@ export class AppModule implements NestModule {
       );
   }
 }
+  

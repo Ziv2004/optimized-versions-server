@@ -73,12 +73,15 @@ The server implements several validation mechanisms to ensure reliable downloads
 ## API Endpoints
 
 - `POST /optimize-version`: Start a new optimization job
+- `POST /start-job/:id`: Manually start a queued optimization job
 - `GET /download/:id`: Download a transcoded file
-- `GET /file-info/:id`: Get file metadata including checksum
 - `GET /job-status/:id`: Check job status
+- `GET /all-jobs `: Check all jobs status
 - `DELETE /cancel-job/:id`: Cancel a job
 - `GET /statistics`: Get server statistics
 - `DELETE /delete-cache`: Clear the cache
+
+For detailed API documentation, see [API Documentation](API_DOCUMENTATION.md).
 
 ## Other
 
