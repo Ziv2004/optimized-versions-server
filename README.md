@@ -12,19 +12,19 @@ The download in the app becomed a 2 step process.
 
 ## Features
 
-- **File Transfer Validation**: Ensures downloads are complete and uncorrupted using checksums
-- **Resumable Downloads**: Support for resuming interrupted downloads
-- **Progress Tracking**: Real-time download progress monitoring
-- **Range Requests**: Efficient partial file downloads
-- **File Metadata**: Pre-download file information including size and checksum
+- **Video Optimization**: Transcode videos to optimal formats and bitrates
+- **Partial Downloads**: Support for HTTP Range requests for efficient streaming
+- **File Integrity**: SHA-256 checksum verification for downloaded files
+- **Job Management**: Queue and track video optimization jobs
+- **Cache Management**: Efficient caching system with automatic cleanup
+- **Statistics**: Monitor server performance and usage metrics
 
-## Usage
 
 Note: The server works best if it's on the same server as the Jellyfin server.
 
 ### Docker-compose
 
-#### Docker-compose example
+## Installation using Docker-compose (example)
 
 ```yaml
 services:
@@ -68,12 +68,7 @@ This means that the user needs to 1. initiate the download, and 2. open the app 
 
 ### 3. File Transfer Validation
 
-The server implements several validation mechanisms to ensure reliable downloads:
-
-- **Checksums**: SHA-256 checksums verify file integrity
-- **Size Validation**: Ensures complete file transfers
-- **Range Requests**: Supports partial downloads and resuming
-- **Progress Tracking**: Real-time download status updates
+The server implements several validation mechanisms to ensure reliable downloads, it run the checks and then hashes the item using SHA256.
 
 ## API Endpoints
 

@@ -29,6 +29,7 @@ export interface Job {
   size: number;
   item: any;
   speed?: number;
+  checksum?: string;
 }
 
 export interface RangeRequest {
@@ -55,6 +56,7 @@ export class AppService {
     private readonly fileRemoval: FileRemoval
 
   ) {
+    this.logger = new Logger('Job');
     this.cacheDir = CACHE_DIR;
     this.maxConcurrentJobs = this.configService.get<number>(
       'MAX_CONCURRENT_JOBS',
@@ -106,7 +108,7 @@ export class AppService {
 
   getJobStatus(jobId: string): Job | null {
     const job = this.activeJobs.find((job) => job.id === jobId);
-    return job || null;
+    return job;
   }
 
   getAllJobs(deviceId?: string | null): Job[] {
@@ -191,7 +193,7 @@ export class AppService {
     if (job) {
       job.status = 'ready-for-removal';
       job.timestamp = new Date()
-      this.logger.log(`Job ${jobId} marked as completed and ready for removal.`);
+      this.logger.log(`Job ${jobId} was cancelled or marked as completed and is ready for removal.`);
     } else {
       this.logger.warn(`Job ${jobId} not found. Cannot mark as completed.`);
     }
@@ -417,16 +419,19 @@ export class AppService {
           }
 
           if (code === 0) {
-            
             job.status = 'completed';
             job.progress = 100;
-            // Update the file size
+            // Update the file size and calculate checksum
             try {
               const stats = await fsPromises.stat(job.outputPath);
               job.size = stats.size;
+              const { isValid, checksum } = await this.validateFileIntegrity(job.outputPath, stats.size);
+              if (isValid) {
+                job.checksum = checksum;
+              }
             } catch (error) {
               this.logger.error(
-                `Error getting file size for job ${jobId}: ${error.message}`,
+                `Error getting file size and checksum for job ${jobId}: ${error.message}`,
               );
             }
             this.logger.log(
@@ -447,6 +452,7 @@ export class AppService {
           this.logger.error(
             `FFmpeg process error for job ${jobId}: ${error.message}`,
           );
+          // reject(error);
         });
       });
     } catch (error) {
@@ -520,7 +526,10 @@ export class AppService {
     }
   }
 
-  private parseRangeHeader(rangeHeader: string, fileSize: number): RangeRequest | null {
+  /**
+   * Parse HTTP Range header
+   */
+  public parseRangeHeader(rangeHeader: string, fileSize: number): RangeRequest | null {
     if (!rangeHeader) return null;
     
     const matches = rangeHeader.match(/bytes=(\d+)-(\d+)?/);
@@ -533,21 +542,6 @@ export class AppService {
       start,
       end: Math.min(end, fileSize - 1),
       total: fileSize
-    };
-  }
-
-  @Get('file-info/:id')
-  async getFileInfo(@Param('id') id: string) {
-    const filePath = this.getTranscodedFilePath(id);
-    if (!filePath) {
-      throw new NotFoundException('File not found or job not completed');
-    }
-
-    const stat = fs.statSync(filePath);
-    return {
-      size: stat.size,
-      contentType: 'video/mp4',
-      acceptsRanges: true
     };
   }
 

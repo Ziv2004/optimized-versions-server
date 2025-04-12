@@ -29,7 +29,9 @@ export class AppController {
   constructor(
     private readonly appService: AppService,
     private logger: Logger,
-  ) {}
+  ) {
+    this.logger = new Logger('ApiRequest');
+  }
 
   @Get('statistics')
   async getStatistics() {
@@ -152,10 +154,16 @@ export class AppController {
         end: range.end
       });
       
+      this.logger.log(`Partial download started for ${filePath}`);
+
       return new Promise((resolve, reject) => {
         fileStream.pipe(res);
         fileStream.on('end', () => {
           this.logger.log(`Partial download completed for ${filePath}`);
+          if (range.end === stat.size - 1) {
+            this.logger.log(`Download completed for ${filePath}`);
+            this.appService.completeJob(id);
+          }
           resolve(null);
         });
         fileStream.on('error', (err) => {
@@ -164,17 +172,19 @@ export class AppController {
         });
       });
     } else {
-      // Handle full file download
+      // Handle full file request
       res.setHeader('Content-Length', stat.size);
       res.setHeader('Content-Type', 'video/mp4');
       res.setHeader('Accept-Ranges', 'bytes');
-      res.setHeader('Content-Disposition', `attachment; filename=transcoded_${id}.mp4`);
       
+      this.logger.log(`Full download started for ${filePath}`);
+
       const fileStream = fs.createReadStream(filePath);
       return new Promise((resolve, reject) => {
         fileStream.pipe(res);
         fileStream.on('end', () => {
           this.logger.log(`Full download completed for ${filePath}`);
+          this.appService.cancelJob(id);
           resolve(null);
         });
         fileStream.on('error', (err) => {
@@ -189,23 +199,5 @@ export class AppController {
   async deleteCache() {
     this.logger.log('Cache deletion request');
     return this.appService.deleteCache();
-  }
-
-  @Get('file-info/:id')
-  async getFileInfo(@Param('id') id: string) {
-    const filePath = this.appService.getTranscodedFilePath(id);
-    if (!filePath) {
-      throw new NotFoundException('File not found or job not completed');
-    }
-
-    const stat = fs.statSync(filePath);
-    const { checksum } = await this.appService.validateFileIntegrity(filePath, stat.size);
-
-    return {
-      size: stat.size,
-      contentType: 'video/mp4',
-      acceptsRanges: true,
-      checksum
-    };
   }
 }
