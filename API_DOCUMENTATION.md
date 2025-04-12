@@ -49,12 +49,12 @@ All endpoints may return the following error responses:
   - `Range`: Optional. Format: `bytes=start-` or `bytes=start-end` for partial downloads
 - **Response**: Video file stream
 - **Response Headers**:
-  - `X-File-Checksum`: SHA-256 checksum of the file
-  - `X-File-Size`: Total size of the file in bytes
-  - `Content-Range`: For partial downloads, format: `bytes start-end/total`
-  - `Content-Length`: Size of the current response
-  - `Content-Type`: `video/mp4`
-  - `Accept-Ranges`: `bytes`
+  - `X-File-Checksum`: String //SHA-256 checksum of the file
+  - `X-File-Size`: Number     //Total size of the file in bytes
+  - `Content-Range`: String   //For partial downloads, format: `bytes start-end/total`
+  - `Content-Length`: Number  //Size of the current response
+  - `Content-Type`: String    //`video/mp4`
+  - `Accept-Ranges`: String   //`bytes`
 
 ### 3. Get Job Status
 - **Endpoint**: `GET /job-status/:id`

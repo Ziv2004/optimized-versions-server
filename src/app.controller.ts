@@ -29,9 +29,7 @@ export class AppController {
   constructor(
     private readonly appService: AppService,
     private logger: Logger,
-  ) {
-    this.logger = new Logger('ApiRequest');
-  }
+  ) { this.logger = new Logger('ApiRequest'); }
 
   @Get('statistics')
   async getStatistics() {

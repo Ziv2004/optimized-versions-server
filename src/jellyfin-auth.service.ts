@@ -10,8 +10,8 @@ export class JellyfinAuthService {
     const jellyfinUrl = this.configService.get<string>('JELLYFIN_URL');
     try {
       // Handle both formats:
-      // 1. Just the token: "00d5ba4119a84be99adcf041b94474fd"
-      // 2. With prefix: "MediaBrowser Token=00d5ba4119a84be99adcf041b94474fd"
+      // 1. Just the token: "******"
+      // 2. With prefix: "MediaBrowser Token=*****"
       const token = authHeader.includes('MediaBrowser Token=')
         ? authHeader.split('=')[1].trim()
         : authHeader.trim();
@@ -19,11 +19,7 @@ export class JellyfinAuthService {
       const response = await axios.get(`${jellyfinUrl}/Users/Me`, {
         headers: { 
           'X-Emby-Token': token,
-          'X-Emby-Client': 'OptimizedVersionsServer',
-          'X-Emby-Client-Version': '1.0.0',
-          'X-Emby-Device-Name': 'OptimizedVersionsServer',
-          'X-Emby-Device-Id': 'OptimizedVersionsServer'
-        },
+          },
       });
       return response.status === 200;
     } catch (error) {
